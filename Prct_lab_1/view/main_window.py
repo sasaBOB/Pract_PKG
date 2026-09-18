@@ -1,6 +1,8 @@
 import tkinter as tk
 from tkinter import ttk, colorchooser
 
+from model.color_math import rgb_to_hsv
+
 
 BG_MAIN   = "#2b2b2b"
 BG_BLOCK  = "#3a3a3a"
@@ -14,9 +16,11 @@ class MainWindow(tk.Tk):
         super().__init__()
         self.vm = vm
         self.title("ЛР1 — HSV ↔ XYZ ↔ LAB (вариант 9)")
-        self.geometry("780x640")
+        self.geometry("820x640")
         self.configure(bg=BG_MAIN)
+
         self._updating = False
+
         self._setup_style()
         self._build()
         self._refresh()
@@ -30,11 +34,6 @@ class MainWindow(tk.Tk):
 
         style.configure("TFrame", background=BG_MAIN)
         style.configure("TLabel", background=BG_MAIN, foreground=FG_TEXT)
-        style.configure("TRadiobutton", background=BG_MAIN, foreground=FG_TEXT)
-        style.map("TRadiobutton",
-                  background=[("active", BG_MAIN)],
-                  foreground=[("active", FG_ACCENT)])
-
         style.configure("TButton", background=BG_BLOCK, foreground=FG_TEXT)
         style.map("TButton", background=[("active", "#4a4a4a")])
 
@@ -57,36 +56,29 @@ class MainWindow(tk.Tk):
                         foreground=FG_TEXT)
 
     def _build(self):
-        top = ttk.Frame(self, padding=10)
-        top.pack(fill="x")
-
-        ttk.Label(top, text="Освещение:").pack(side="left")
-        self.std_var = tk.StringVar(value="D65")
-        for s in ("D65", "D50", "E"):
-            ttk.Radiobutton(top, text=s, value=s, variable=self.std_var,
-                            command=self._on_standard).pack(side="left", padx=4)
-
         prev = ttk.Frame(self, padding=6)
-        prev.pack(fill="x", padx=10)
-        self.preview = tk.Canvas(prev, width=600, height=70,
+        prev.pack(fill="x", padx=10, pady=(10, 6))
+        self.preview = tk.Canvas(prev, width=620, height=70,
                                  bg="#ff0000", highlightthickness=0)
         self.preview.pack(side="left", fill="x", expand=True)
         ttk.Button(prev, text="Палитра…", command=self._pick_color).pack(side="left", padx=6)
 
         self.hsv_vars = self._make_block(
-            "HSV",
-            [("H", 0, 360, 1, "wrap"),
+            "HSV", "hsv",
+            [("H", 0, 359.99, 0.5, "wrap"),
              ("S", 0, 1, 0.01, "clamp"),
              ("V", 0, 1, 0.01, "clamp")],
             self._on_hsv)
+
         self.xyz_vars = self._make_block(
-            "XYZ",
+            "XYZ", "xyz",
             [("X", 0, 95.05, 0.01, "clamp"),
              ("Y", 0, 100, 0.01, "clamp"),
              ("Z", 0, 108.9, 0.01, "clamp")],
             self._on_xyz)
+
         self.lab_vars = self._make_block(
-            "LAB",
+            "LAB", "lab",
             [("L", 0, 100, 0.01, "clamp"),
              ("a", -128, 127, 0.01, "clamp"),
              ("b", -128, 127, 0.01, "clamp")],
@@ -95,7 +87,7 @@ class MainWindow(tk.Tk):
         self.warn_label = ttk.Label(self, text="", foreground="#ff6b6b")
         self.warn_label.pack(pady=6)
 
-    def _make_block(self, title, fields, callback):
+    def _make_block(self, title, model_name, fields, callback):
         f = ttk.LabelFrame(self, text=title, padding=8)
         f.pack(fill="x", padx=10, pady=4)
         vars_ = []
@@ -106,15 +98,14 @@ class MainWindow(tk.Tk):
             scale = tk.Scale(
                 f, from_=lo, to=hi, resolution=step,
                 orient="horizontal",
-                bg=BG_BLOCK,
-                fg=FG_TEXT,
+                bg=BG_BLOCK, fg=FG_TEXT,
                 troughcolor=BG_SCALE,
                 activebackground=FG_ACCENT,
                 highlightthickness=0, bd=0,
                 showvalue=False,
                 command=lambda val, idx=i: self._on_scale_move(idx, float(val), callback),
             )
-            scale.grid(row=i, column=1, sticky="ew", padx=4)
+            scale.grid(row=i, column=1, sticky="ew", padx=4, pady=2)
 
             entry_var = tk.StringVar()
             entry = ttk.Entry(f, textvariable=entry_var, width=10)
@@ -125,7 +116,13 @@ class MainWindow(tk.Tk):
             entry.bind("<Return>", commit)
 
             f.columnconfigure(1, weight=1)
-            vars_.append({"scale": scale, "entry": entry_var, "lo": lo, "hi": hi})
+            vars_.append({
+                "scale": scale,
+                "entry": entry_var,
+                "lo": lo, "hi": hi,
+                "model": model_name,
+                "index": i,
+            })
         return vars_
 
     def _commit_entry(self, idx, entry_var, callback, lo, hi, mode):
@@ -149,26 +146,22 @@ class MainWindow(tk.Tk):
             return
         callback(idx, val)
 
-    def _on_standard(self):
-        self.vm.set_standard(self.std_var.get())
-        self._refresh()
-
     def _on_hsv(self, idx, value):
-        hsv = [self._get_value(self.hsv_vars[i]) for i in range(3)]
-        hsv[idx] = value
-        self.vm.set_from_hsv(*hsv)
+        values = [self._get_value(self.hsv_vars[i]) for i in range(3)]
+        values[idx] = value
+        self.vm.set_from_hsv(*values)
         self._refresh(skip="hsv")
 
     def _on_xyz(self, idx, value):
-        xyz = [self._get_value(self.xyz_vars[i]) for i in range(3)]
-        xyz[idx] = value
-        self.vm.set_from_xyz(*xyz)
+        values = [self._get_value(self.xyz_vars[i]) for i in range(3)]
+        values[idx] = value
+        self.vm.set_from_xyz(*values)
         self._refresh(skip="xyz")
 
     def _on_lab(self, idx, value):
-        lab = [self._get_value(self.lab_vars[i]) for i in range(3)]
-        lab[idx] = value
-        self.vm.set_from_lab(*lab)
+        values = [self._get_value(self.lab_vars[i]) for i in range(3)]
+        values[idx] = value
+        self.vm.set_from_lab(*values)
         self._refresh(skip="lab")
 
     @staticmethod
@@ -183,7 +176,6 @@ class MainWindow(tk.Tk):
         if not rgb:
             return
         r, g, b = [int(c) for c in rgb]
-        from model.color_math import rgb_to_hsv
         h, s, v = rgb_to_hsv(r, g, b)
         self.vm.set_from_hsv(h, s, v)
         self._refresh()
