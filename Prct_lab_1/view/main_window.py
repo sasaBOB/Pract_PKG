@@ -17,6 +17,7 @@ class MainWindow(tk.Tk):
         self.vm = vm
         self.title("ЛР1 — HSV ↔ XYZ ↔ LAB (вариант 9)")
         self.geometry("820x640")
+        self.resizable(False, False)
         self.configure(bg=BG_MAIN)
 
         self._updating = False
@@ -172,10 +173,10 @@ class MainWindow(tk.Tk):
             return 0.0
 
     def _pick_color(self):
-        rgb, _ = colorchooser.askcolor()
-        if not rgb:
+        result = colorchooser.askcolor()
+        if result is None or result[0] is None:
             return
-        r, g, b = [int(c) for c in rgb]
+        r, g, b = [int(c) for c in result[0]]
         h, s, v = rgb_to_hsv(r, g, b)
         self.vm.set_from_hsv(h, s, v)
         self._refresh()
