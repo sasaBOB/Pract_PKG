@@ -1,6 +1,6 @@
 """Ручное чтение метаданных изображений без Pillow/Image/System.Drawing."""
 from __future__ import annotations
-import os, struct
+import os, struct, re
 from dataclasses import dataclass, asdict
 from typing import Optional
 
@@ -29,8 +29,24 @@ def _read_exact(f, n):
 def _u16(b, endian='<'): return struct.unpack(endian+'H', b)[0]
 def _u32(b, endian='<'): return struct.unpack(endian+'I', b)[0]
 def _resolution_text(x, y):
-    if x and y and x > 0 and y > 0: return f'{x:g} × {y:g} dpi'
+    if x is not None and y is not None and x > 0 and y > 0:
+        return f'{x:g} × {y:g} dpi'
     return 'Не указано'
+
+def _calculate_resolution(dimensions, color_depth):
+    
+    match = re.search(r'(\d+)\s*[×xх]\s*(\d+)', dimensions)
+    depth_match = re.search(r'(\d+)', color_depth)
+    if not match or not depth_match:
+        return 'Не указано'
+    width, height = int(match.group(1)), int(match.group(2))
+    depth = int(depth_match.group(1))
+    if width <= 0 or height <= 0:
+        return 'Не указано'
+    divisor = 254 if depth <= 8 else 10
+    value = width * height / divisor
+    return f'{value:.2f}'
+
 def _fmt_size(n):
     for unit in ('Б','КиБ','МиБ','ГиБ'):
         if n < 1024 or unit=='ГиБ': return f'{n:.1f} {unit}' if unit!='Б' else f'{n} Б'
@@ -222,6 +238,10 @@ def read_image_info(path):
             else: raise ParseError('Неизвестная сигнатура файла: содержимое не похоже на поддерживаемое изображение')
             parser=PARSERS[actual]
             fmt,dims,res,depth,compression,details=parser(f,size)
+            # Если DPI/разрешение не записано в метаданных, вычисляем значение
+            # по ширине, высоте и глубине цвета согласно формуле задания.
+            if not res or res.startswith('Не указано'):
+                res = _calculate_resolution(dims, depth)
             result.format=fmt; result.dimensions=dims; result.resolution=res; result.color_depth=depth; result.compression=compression; result.details=details
             if actual != ext and not (actual=='.jpg' and ext=='.jpeg') and not (actual=='.tif' and ext=='.tiff'):
                 result.status=f'Предупреждение: расширение {ext or "без расширения"}, формат по сигнатуре — {fmt}'

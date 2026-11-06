@@ -1,5 +1,7 @@
 import os
 import csv
+import re
+import math
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
@@ -28,10 +30,10 @@ class App:
         self.table = ttk.Treeview(root, columns=columns, show="headings")
         names = {
             "name": "Имя файла", "format": "Формат", "size": "Размер, px",
-            "resolution": "Разрешение", "depth": "Глубина цвета",
+            "resolution": "Разрешение ", "depth": "Глубина цвета",
             "compression": "Сжатие", "file_size": "Размер файла", "status": "Статус"
         }
-        widths = {"name": 180, "format": 70, "size": 100, "resolution": 110,
+        widths = {"name": 180, "format": 70, "size": 100, "resolution": 250,
                   "depth": 120, "compression": 150, "file_size": 100, "status": 150}
         for col in columns:
             self.table.heading(col, text=names[col])
